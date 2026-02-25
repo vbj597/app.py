@@ -5,20 +5,22 @@ import requests
 import plotly.graph_objects as go
 import plotly.express as px
 from sklearn.linear_model import LinearRegression
+from datetime import datetime
 
 # -------------------------------------------------
 # PAGE CONFIG
 # -------------------------------------------------
-st.set_page_config(page_title="India Fiscal Intelligence System", layout="wide")
-st.title("🇮🇳 INDIA FISCAL INTELLIGENCE SYSTEM")
-st.markdown("Live Data • Fiscal Engine • ML Forecast • External Sector")
+st.set_page_config(page_title="India Fiscal Intelligence Platform", layout="wide")
+st.title("🇮🇳 India Fiscal Intelligence Platform")
+st.markdown("Live Data • Fiscal Engine • ML Forecast • External Sector • Scenario Tracking")
 
 # -------------------------------------------------
-# SAFE WORLD BANK FETCH
+# CACHED LIVE DATA FETCH (Auto-refresh every 12 hrs)
 # -------------------------------------------------
+@st.cache_data(ttl=43200)
 def fetch_worldbank(indicator, fallback):
     try:
-        url = f"https://api.worldbank.org/v2/country/IND/indicator/{indicator}?format=json&per_page=5"
+        url = f"https://api.worldbank.org/v2/country/IND/indicator/{indicator}?format=json&per_page=10"
         response = requests.get(url, timeout=10)
         data = response.json()
 
@@ -30,7 +32,6 @@ def fetch_worldbank(indicator, fallback):
     except:
         return fallback
 
-# Live India anchors (with safe fallback values)
 gdp_growth_live = fetch_worldbank("NY.GDP.MKTP.KD.ZG", 6.5)
 inflation_live  = fetch_worldbank("FP.CPI.TOTL.ZG", 4.0)
 debt_live       = fetch_worldbank("GC.DOD.TOTL.GD.ZS", 85.0)
@@ -39,9 +40,9 @@ exports_live    = fetch_worldbank("NE.EXP.GNFS.ZS", 20.0)
 # -------------------------------------------------
 # SIDEBAR CONTROLS
 # -------------------------------------------------
-st.sidebar.header("Strategic Objective")
+st.sidebar.header("Policy Objective")
 objective = st.sidebar.selectbox(
-    "Policy Objective",
+    "Strategic Target",
     ["Maximise Growth", "Debt Stability", "Inflation Targeting"]
 )
 
@@ -67,7 +68,6 @@ years = 10
 b = 0.7
 multiplier = 1 / (1 - b)
 
-# Shock adjustments
 growth_penalty = -3 if recession_shock else 0
 inflation_boost = 2 if oil_shock else 0
 
@@ -83,18 +83,15 @@ inflation_list = []
 debt_ratio_list = []
 
 for year in range(years):
-
     adjusted_growth = natural_growth + growth_penalty
 
     T = tax_rate * GDP
     fiscal_impact = multiplier * (G - T)
 
-    # External sector channel
     export_boost = (exchange_rate - 83) * 0.2
     exports_effect = exports_live + export_boost
 
     GDP = GDP * (1 + adjusted_growth/100) + fiscal_impact + (exports_effect * 0.05)
-
     inflation = inflation_target + 0.25 * (GDP - potential_gdp) + inflation_boost
 
     deficit = G - T
@@ -125,7 +122,7 @@ def forecast_series(series):
 gdp_forecast = forecast_series(gdp_list)
 
 # -------------------------------------------------
-# SECTION 1 — STRATEGIC DASHBOARD
+# STRATEGIC DASHBOARD
 # -------------------------------------------------
 st.header("📊 Strategic Overview")
 
@@ -144,7 +141,7 @@ fig_gauge.update_layout(template="plotly_dark", height=250)
 st.plotly_chart(fig_gauge, use_container_width=True)
 
 # -------------------------------------------------
-# SECTION 2 — DEBT RISK ENGINE
+# DEBT RISK ENGINE
 # -------------------------------------------------
 st.header("🚨 Debt Sustainability Engine")
 
@@ -155,7 +152,6 @@ elif final_debt_ratio > 85:
     risk_score += 40
 elif final_debt_ratio > 75:
     risk_score += 20
-
 if final_growth < 0:
     risk_score += 25
 if final_inflation > 8:
@@ -169,7 +165,7 @@ fig_heat.update_layout(template="plotly_dark", height=200)
 st.plotly_chart(fig_heat, use_container_width=True)
 
 # -------------------------------------------------
-# SECTION 3 — RBI MONITOR
+# RBI MONITOR
 # -------------------------------------------------
 st.header("🏦 RBI Inflation Monitoring")
 
@@ -181,28 +177,21 @@ else:
     st.success("Inflation Within Target Band")
 
 # -------------------------------------------------
-# SECTION 4 — AI FISCAL ADVISOR
+# AI POLICY RECOMMENDER
 # -------------------------------------------------
 st.header("🤖 Fiscal Strategy Recommendation")
 
 if objective == "Maximise Growth":
-    if G < 50:
-        st.info("Recommendation: Increase spending moderately.")
-    else:
-        st.info("Growth strong. Monitor debt levels.")
+    recommendation = "Increase spending moderately if debt is manageable."
 elif objective == "Debt Stability":
-    if final_debt_ratio > 85:
-        st.info("Recommendation: Reduce deficit via tax increase or spending cuts.")
-    else:
-        st.info("Debt trajectory manageable.")
-elif objective == "Inflation Targeting":
-    if final_inflation > 6:
-        st.info("Recommendation: Reduce fiscal stimulus.")
-    else:
-        st.info("Inflation stable.")
+    recommendation = "Reduce deficit if debt ratio exceeds safe threshold."
+else:
+    recommendation = "Adjust fiscal stance to stabilise inflation."
+
+st.info(recommendation)
 
 # -------------------------------------------------
-# SECTION 5 — TRAJECTORIES + ML FORECAST
+# ML FORECAST VISUAL
 # -------------------------------------------------
 st.header("📈 GDP Projection + ML Forecast")
 
@@ -217,8 +206,27 @@ fig1.update_layout(template="plotly_dark", height=350)
 st.plotly_chart(fig1, use_container_width=True)
 
 st.header("💰 Debt Trajectory")
-
 fig2 = go.Figure()
-fig2.add_trace(go.Scatter(y=debt_list, name="Debt"))
+fig2.add_trace(go.Scatter(y=debt_list))
 fig2.update_layout(template="plotly_dark", height=350)
 st.plotly_chart(fig2, use_container_width=True)
+
+# -------------------------------------------------
+# SCENARIO LOGGING (IN-MEMORY TABLE)
+# -------------------------------------------------
+st.header("🗃 Scenario Log")
+
+if "log" not in st.session_state:
+    st.session_state.log = []
+
+if st.button("Save Current Scenario"):
+    st.session_state.log.append({
+        "Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "Growth": round(final_growth,2),
+        "Debt %": round(final_debt_ratio,2),
+        "Inflation": round(final_inflation,2),
+        "Objective": objective
+    })
+
+if st.session_state.log:
+    st.dataframe(pd.DataFrame(st.session_state.log))
