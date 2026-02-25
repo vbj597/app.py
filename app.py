@@ -1,3 +1,4 @@
+import streamlit as st
 import requests
 
 def fetch_worldbank(indicator):
@@ -38,6 +39,7 @@ fig_ml.add_trace(go.Scatter(
 ))
 fig_ml.update_layout(template="plotly_dark")
 st.plotly_chart(fig_ml)
+
 import streamlit as st
 import numpy as np
 import pandas as pd
