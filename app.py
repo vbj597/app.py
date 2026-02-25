@@ -1,113 +1,73 @@
 import streamlit as st
-import requests
-
-def fetch_worldbank(indicator, fallback):
-    url = f"https://api.worldbank.org/v2/country/IND/indicator/{indicator}?format=json&per_page=5"
-    response = requests.get(url)
-    data = response.json()
-
-    if len(data) > 1:
-        for entry in data[1]:
-            if entry["value"] is not None:
-                return float(entry["value"])
-
-    return fallback
-
-
-gdp_growth_live = fetch_worldbank("NY.GDP.MKTP.KD.ZG")
-inflation_live = fetch_worldbank("FP.CPI.TOTL.ZG")
-debt_live = fetch_worldbank("GC.DOD.TOTL.GD.ZS")
-exports_live = fetch_worldbank("NE.EXP.GNFS.ZS")
-exchange_rate = st.sidebar.slider("INR/USD Exchange Rate", 60, 100, 83)
-
-if exports_live is None:
-    exports_live = 20.0
-
-export_boost = (exchange_rate - 83) * 0.2
-exports_effect = exports_live + export_boost
-
-GDP += exports_effect * 0.1
-from sklearn.linear_model import LinearRegression
-
-def forecast_series(series):
-    X = np.array(range(len(series))).reshape(-1,1)
-    y = np.array(series)
-    model = LinearRegression()
-    model.fit(X, y)
-    future = model.predict(np.array(range(len(series), len(series)+5)).reshape(-1,1))
-    return future
-
-gdp_forecast = forecast_series(gdp_list)
-fig_ml = go.Figure()
-fig_ml.add_trace(go.Scatter(y=gdp_list, name="Historical Projection"))
-fig_ml.add_trace(go.Scatter(
-    y=list(gdp_list) + list(gdp_forecast),
-    name="ML Forecast",
-    line=dict(dash="dash")
-))
-fig_ml.update_layout(template="plotly_dark")
-st.plotly_chart(fig_ml)
-
-import streamlit as st
 import numpy as np
 import pandas as pd
+import requests
 import plotly.graph_objects as go
 import plotly.express as px
+from sklearn.linear_model import LinearRegression
 
 # -------------------------------------------------
 # PAGE CONFIG
 # -------------------------------------------------
 st.set_page_config(page_title="India Fiscal Intelligence System", layout="wide")
-
-st.markdown("""
-<style>
-body {background-color: #0e1117;}
-.block-container {padding-top: 2rem;}
-</style>
-""", unsafe_allow_html=True)
-
 st.title("🇮🇳 INDIA FISCAL INTELLIGENCE SYSTEM")
-st.markdown("Strategic 10-Year Fiscal Command Platform")
+st.markdown("Live Data • Fiscal Engine • ML Forecast • External Sector")
 
 # -------------------------------------------------
-# OBJECTIVE SELECTION
+# SAFE WORLD BANK FETCH
+# -------------------------------------------------
+def fetch_worldbank(indicator, fallback):
+    try:
+        url = f"https://api.worldbank.org/v2/country/IND/indicator/{indicator}?format=json&per_page=5"
+        response = requests.get(url, timeout=10)
+        data = response.json()
+
+        if len(data) > 1:
+            for entry in data[1]:
+                if entry["value"] is not None:
+                    return float(entry["value"])
+        return fallback
+    except:
+        return fallback
+
+# Live India anchors (with safe fallback values)
+gdp_growth_live = fetch_worldbank("NY.GDP.MKTP.KD.ZG", 6.5)
+inflation_live  = fetch_worldbank("FP.CPI.TOTL.ZG", 4.0)
+debt_live       = fetch_worldbank("GC.DOD.TOTL.GD.ZS", 85.0)
+exports_live    = fetch_worldbank("NE.EXP.GNFS.ZS", 20.0)
+
+# -------------------------------------------------
+# SIDEBAR CONTROLS
 # -------------------------------------------------
 st.sidebar.header("Strategic Objective")
-
 objective = st.sidebar.selectbox(
-    "Choose Government Objective",
+    "Policy Objective",
     ["Maximise Growth", "Debt Stability", "Inflation Targeting"]
 )
 
-# -------------------------------------------------
-# SHOCK CONTROLS
-# -------------------------------------------------
-st.sidebar.header("Global Shock Module")
-
+st.sidebar.header("Global Shocks")
 oil_shock = st.sidebar.checkbox("Oil Price Shock")
 recession_shock = st.sidebar.checkbox("Global Recession")
 
-# -------------------------------------------------
-# POLICY CONTROLS
-# -------------------------------------------------
 st.sidebar.header("Fiscal Controls")
-
-G = st.sidebar.slider("Government Spending", 10, 80, 35)
+G = st.sidebar.slider("Government Spending Index", 10, 80, 35)
 tax_rate = st.sidebar.slider("Tax Rate", 0.05, 0.4, 0.2)
+exchange_rate = st.sidebar.slider("INR/USD Exchange Rate", 60, 100, 83)
 
 # -------------------------------------------------
-# BASE PARAMETERS (India-style)
+# MODEL PARAMETERS
 # -------------------------------------------------
 potential_gdp = 100
-natural_growth = 6.5
-inflation_target = 4
-b = 0.7
-multiplier = 1 / (1 - b)
-initial_debt = 85      # closer to India debt ratio zone
+natural_growth = gdp_growth_live
+inflation_target = inflation_live
+initial_debt = debt_live
 interest_on_debt = 7
 years = 10
 
-# Shock effects
+b = 0.7
+multiplier = 1 / (1 - b)
+
+# Shock adjustments
 growth_penalty = -3 if recession_shock else 0
 inflation_boost = 2 if oil_shock else 0
 
@@ -129,7 +89,12 @@ for year in range(years):
     T = tax_rate * GDP
     fiscal_impact = multiplier * (G - T)
 
-    GDP = GDP * (1 + adjusted_growth/100) + fiscal_impact
+    # External sector channel
+    export_boost = (exchange_rate - 83) * 0.2
+    exports_effect = exports_live + export_boost
+
+    GDP = GDP * (1 + adjusted_growth/100) + fiscal_impact + (exports_effect * 0.05)
+
     inflation = inflation_target + 0.25 * (GDP - potential_gdp) + inflation_boost
 
     deficit = G - T
@@ -145,6 +110,19 @@ for year in range(years):
 final_growth = ((gdp_list[-1] - potential_gdp)/potential_gdp)*100
 final_debt_ratio = debt_ratio_list[-1]
 final_inflation = inflation_list[-1]
+
+# -------------------------------------------------
+# MACHINE LEARNING FORECAST
+# -------------------------------------------------
+def forecast_series(series):
+    X = np.array(range(len(series))).reshape(-1,1)
+    y = np.array(series)
+    model = LinearRegression()
+    model.fit(X, y)
+    future = model.predict(np.array(range(len(series), len(series)+5)).reshape(-1,1))
+    return future
+
+gdp_forecast = forecast_series(gdp_list)
 
 # -------------------------------------------------
 # SECTION 1 — STRATEGIC DASHBOARD
@@ -166,11 +144,10 @@ fig_gauge.update_layout(template="plotly_dark", height=250)
 st.plotly_chart(fig_gauge, use_container_width=True)
 
 # -------------------------------------------------
-# SECTION 2 — DEBT RISK ANALYSIS
+# SECTION 2 — DEBT RISK ENGINE
 # -------------------------------------------------
 st.header("🚨 Debt Sustainability Engine")
 
-# Crisis probability (simple scoring logic)
 risk_score = 0
 if final_debt_ratio > 95:
     risk_score += 60
@@ -181,7 +158,6 @@ elif final_debt_ratio > 75:
 
 if final_growth < 0:
     risk_score += 25
-
 if final_inflation > 8:
     risk_score += 15
 
@@ -207,41 +183,42 @@ else:
 # -------------------------------------------------
 # SECTION 4 — AI FISCAL ADVISOR
 # -------------------------------------------------
-st.header("🤖 Fiscal Strategy Recommendation Engine")
-
-recommendation = ""
+st.header("🤖 Fiscal Strategy Recommendation")
 
 if objective == "Maximise Growth":
     if G < 50:
-        recommendation = "Increase spending moderately to boost growth."
+        st.info("Recommendation: Increase spending moderately.")
     else:
-        recommendation = "Growth is strong. Monitor debt carefully."
-
+        st.info("Growth strong. Monitor debt levels.")
 elif objective == "Debt Stability":
     if final_debt_ratio > 85:
-        recommendation = "Reduce deficit. Increase taxes or cut spending."
+        st.info("Recommendation: Reduce deficit via tax increase or spending cuts.")
     else:
-        recommendation = "Debt trajectory acceptable."
-
+        st.info("Debt trajectory manageable.")
 elif objective == "Inflation Targeting":
     if final_inflation > 6:
-        recommendation = "Reduce fiscal stimulus to ease inflation."
+        st.info("Recommendation: Reduce fiscal stimulus.")
     else:
-        recommendation = "Inflation under control."
-
-st.info(recommendation)
+        st.info("Inflation stable.")
 
 # -------------------------------------------------
-# SECTION 5 — TRAJECTORIES
+# SECTION 5 — TRAJECTORIES + ML FORECAST
 # -------------------------------------------------
-st.header("📈 Economic Trajectories")
+st.header("📈 GDP Projection + ML Forecast")
 
 fig1 = go.Figure()
-fig1.add_trace(go.Scatter(y=gdp_list))
-fig1.update_layout(template="plotly_dark", height=280)
+fig1.add_trace(go.Scatter(y=gdp_list, name="Simulated GDP"))
+fig1.add_trace(go.Scatter(
+    y=list(gdp_list) + list(gdp_forecast),
+    name="ML Forecast",
+    line=dict(dash="dash")
+))
+fig1.update_layout(template="plotly_dark", height=350)
 st.plotly_chart(fig1, use_container_width=True)
 
+st.header("💰 Debt Trajectory")
+
 fig2 = go.Figure()
-fig2.add_trace(go.Scatter(y=debt_list))
-fig2.update_layout(template="plotly_dark", height=280)
+fig2.add_trace(go.Scatter(y=debt_list, name="Debt"))
+fig2.update_layout(template="plotly_dark", height=350)
 st.plotly_chart(fig2, use_container_width=True)
