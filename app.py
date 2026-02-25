@@ -1,13 +1,20 @@
 import streamlit as st
 import requests
 
-def fetch_worldbank(indicator):
+def fetch_worldbank(indicator, fallback):
     url = f"https://api.worldbank.org/v2/country/IND/indicator/{indicator}?format=json&per_page=5"
     response = requests.get(url)
     data = response.json()
+
     if len(data) > 1:
-        return data[1][0]['value']
-    return None
+        for entry in data[1]:
+            if entry["value"] is not None:
+                return float(entry["value"])
+
+    return fallback
+
+if exports_live is None:
+    exports_live = 20.0
 
 gdp_growth_live = fetch_worldbank("NY.GDP.MKTP.KD.ZG")
 inflation_live = fetch_worldbank("FP.CPI.TOTL.ZG")
