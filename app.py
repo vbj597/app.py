@@ -13,14 +13,15 @@ def fetch_worldbank(indicator, fallback):
 
     return fallback
 
-if exports_live is None:
-    exports_live = 20.0
 
 gdp_growth_live = fetch_worldbank("NY.GDP.MKTP.KD.ZG")
 inflation_live = fetch_worldbank("FP.CPI.TOTL.ZG")
 debt_live = fetch_worldbank("GC.DOD.TOTL.GD.ZS")
 exports_live = fetch_worldbank("NE.EXP.GNFS.ZS")
 exchange_rate = st.sidebar.slider("INR/USD Exchange Rate", 60, 100, 83)
+
+if exports_live is None:
+    exports_live = 20.0
 
 export_boost = (exchange_rate - 83) * 0.2
 exports_effect = exports_live + export_boost
